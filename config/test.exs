@@ -20,5 +20,5 @@ config :url_shortener, UrlShortener.Repo,
   pool: Ecto.Adapters.SQL.Sandbox
 
 
-config :url_shortener, time_now: UrlShortener.TimeNowMock
+config :url_shortener, timex: UrlShortener.TimeNowMock
 config :url_shortener, task: UrlShortener.TaskMock

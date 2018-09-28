@@ -25,14 +25,13 @@ Simple Url shortener in Elixir
 ### Architecture
 
 - One POST endpoint to create the URL and reply with a JSON containing the short key hash: `/api/generate_short_url`
-- One generic GET endpoint to access the long url through the hash created on POST enpoint `/SHORT_HASH`
+- One generic GET endpoint to access the long url through the hash created on POST endpoint `/SHORT_HASH`
 - Each POST of a new long url generates a new line in `urls` table, with a new short hash and validity to one month later. If the hash already exists it only updates the validity and returns the already created hash.
 - Each GET of an existing short hash will generate a new registry in `url_metadata` table, associated by the urls_id, so in order to query by a long url, for example, it is necessary to JOIN the two.
 - The metadata (request headers) was saved as a json map (jsonb structure in postgres, map in elixir), this is to allow flexibility in the request headers, as they may change a lot depending on the client.
 - Example query for the URL `http://google.com/` see all the metadata generated:
-select metadata from url_metadata um, urls u
-where um.urls_id = u.id
-and u.full_url = 'http://google.com/'
+select metadata from url_metadata
+where full_url = 'http://google.com/'
 - Example query to select all requests hitting localhost, querying the JSON inside the table:
 select * from url_metadata
 WHERE metadata @> '{"host": "localhost:4000"}'

@@ -1,34 +1,23 @@
 defmodule UrlShortener.UrlLengthener do
-  alias UrlShortener.Repo
-  alias UrlShortener.Schema.Urls
-  alias UrlShortener.Utils
+
+  alias UrlShortener.UrlManager
   alias UrlShortener.Schema.UrlMetadata
+  alias UrlShortener.Repo
 
   @task Application.get_env(:url_shortener, :task, Task)
-  @time_now Application.get_env(:url_shortener, :time_now, Timex)
-  @month_in_seconds 2_592_000
 
   def lengthen(short_url) do
-    with schema = %Urls{id: db_id, full_url: full_url, valid_until: url_valid_date} <-
-           Repo.get_by(Urls, short_url: short_url),
-         true <- is_valid?(url_valid_date) do
-      reset_validity(schema)
-      {:ok, full_url, db_id}
+    with [{_short_url, full_url}] <- :ets.lookup(:shortened_urls, short_url) do
+
+      reset_validity(short_url)
+      {:ok, full_url}
     else
-      false -> {:error, "The requested short url is not valid anymore"}
-      nil -> {:not_found_error, "The requested short url does not exist"}
+      [] -> {:not_found_error, "The requested short url does not exist"}
     end
   end
 
-  defp is_valid?(url_valid_date) do
-    @time_now.now()
-    |> Timex.diff(url_valid_date) < @month_in_seconds
-  end
-
-  defp reset_validity(schema = %Urls{}) do
-    schema
-    |> Urls.changeset(%{valid_until: Utils.advance_one_month()})
-    |> Repo.insert_or_update()
+  def reset_validity(short_url) do
+    GenServer.cast(UrlManager, {:reset_validity, short_url})
   end
 
   def build_final_url(parsed_uri, nil, new_params) when map_size(new_params) == 0,
@@ -57,13 +46,13 @@ defmodule UrlShortener.UrlLengthener do
     |> URI.to_string()
   end
 
-  def save_metadata_asynchronously(%Plug.Conn{req_headers: request_headers}, url_id) do
+  def save_metadata_asynchronously(%Plug.Conn{req_headers: request_headers}, short_url, full_url) do
     @task.start(fn ->
       headers_map =
         request_headers
         |> Map.new
       %UrlMetadata{}
-      |> UrlMetadata.changeset(%{urls_id: url_id, metadata: headers_map})
+      |> UrlMetadata.changeset(%{short_url: short_url, full_url: full_url, metadata: headers_map})
       |> Repo.insert()
     end)
   end

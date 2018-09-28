@@ -4,7 +4,8 @@ defmodule UrlShortener.Schema.UrlMetadata do
 
 
   schema "url_metadata" do
-    belongs_to(:urls, UrlShortener.Schema.Urls)
+    field(:short_url, :string)
+    field(:full_url, :string)
     field(:metadata, :map)
     timestamps()
   end
@@ -12,8 +13,7 @@ defmodule UrlShortener.Schema.UrlMetadata do
   @doc false
   def changeset(url_metadata = %__MODULE__{}, attrs) do
     url_metadata
-    |> cast(attrs, [:urls_id, :metadata])
-    |> validate_required([:urls_id, :metadata])
-    |> foreign_key_constraint(:urls)
+    |> cast(attrs, [:short_url, :full_url, :metadata])
+    |> validate_required([:short_url, :full_url, :metadata])
   end
 end

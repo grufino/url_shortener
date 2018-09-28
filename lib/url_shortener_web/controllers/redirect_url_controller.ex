@@ -4,20 +4,16 @@ defmodule UrlShortenerWeb.RedirectUrlController do
   alias UrlShortener.UrlLengthener
 
   def redirect_url(conn, params) do
-    with %{"shortUrl" => shortUrl} <- params,
+    with %{"shortUrl" => short_url} <- params,
          new_query_params <- Map.drop(params, ["shortUrl"]),
-         {:ok, long_url, url_id} <- UrlLengthener.lengthen(shortUrl),
-         parsed_uri = %URI{query: db_query_params} <- URI.parse(long_url) do
+         {:ok, full_url} <- UrlLengthener.lengthen(short_url),
+         parsed_uri = %URI{query: db_query_params} <- URI.parse(full_url) do
 
-      UrlLengthener.save_metadata_asynchronously(conn, url_id)
+      UrlLengthener.save_metadata_asynchronously(conn, short_url, full_url)
 
       conn
       |> redirect(external: UrlLengthener.build_final_url(parsed_uri, db_query_params, new_query_params))
     else
-      {:error, error_message} ->
-        %{"error" => error_message}
-        |> send_json_response(conn, 400)
-
       {:not_found_error, error_message} ->
         %{"error" => error_message}
         |> send_json_response(conn, 404)

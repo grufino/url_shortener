@@ -1,7 +1,6 @@
 defmodule UrlShortenerWeb.ControllersTest do
   use UrlShortenerWeb.ConnCase, async: true
 
-  alias UrlShortener.Schema.Urls
   alias UrlShortener.Schema.UrlMetadata
   alias UrlShortener.Repo
 
@@ -24,9 +23,9 @@ defmodule UrlShortenerWeb.ControllersTest do
   end
 
   test "responds with different short URLs for different long URLs in json format", %{conn: conn} do
-    original_1 = "http://example.com/about/index.html"
+    original_1 = "http://example.com/about/url_to_be_shortened_1"
 
-    original_2 = "http://example.com/about/url_to_be_shortened"
+    original_2 = "http://example.com/about/url_to_be_shortened_2"
 
     response_1 = post(conn, "api/generate_short_url", fullUrl: original_1)
 
@@ -40,11 +39,13 @@ defmodule UrlShortenerWeb.ControllersTest do
   end
 
   test "redirects to long url when shortened one created by this api provided", %{conn: conn} do
-    original = "http://example.com/about/index.html"
+    original = "http://example.com/about/basic_test"
 
     response = post(conn, "api/generate_short_url", fullUrl: original)
 
     %{"shortUrl" => short_url} = response.resp_body |> Poison.decode!()
+
+    :timer.sleep(2000)
 
     conn = get(conn, "/#{short_url}")
 
@@ -53,7 +54,7 @@ defmodule UrlShortenerWeb.ControllersTest do
   end
 
   test "long URL is always responded with the same short url", %{conn: conn} do
-    original = "http://example.com/about/index.html"
+    original = "http://example.com/about/same_url"
 
     response_1 = post(conn, "api/generate_short_url", fullUrl: original)
 
@@ -75,16 +76,22 @@ defmodule UrlShortenerWeb.ControllersTest do
        %{conn: conn} do
     original = "http://example.com/about/expire_this_url"
 
-    response = post(conn, "api/generate_short_url", fullUrl: original)
-
-    %{"shortUrl" => short_url} = response.resp_body |> Poison.decode!()
+    post_response = post(conn, "api/generate_short_url", fullUrl: original)
 
     :timer.sleep(10000)
 
-    response = get(conn, "/#{short_url}")
+    Process.send(UrlShortener.UrlManager, :clean_expired, [:noconnect])
 
-    assert %{"error" => "The requested short url is not valid anymore"} =
-             response.resp_body |> Poison.decode!()
+    :timer.sleep(3000)
+
+    %{"shortUrl" => short_url} = post_response.resp_body |> Poison.decode!()
+
+    get_response = get(conn, "/#{short_url}")
+
+    assert %{"error" => "The requested short url does not exist"} =
+      get_response.resp_body |> Poison.decode!()
+
+    assert get_response.status == 404
   end
 
   test "doesn't expire url because of redirect (with mocked time_now to 5 seconds before 1 month on TimeNowMock.time_now())",
@@ -98,6 +105,8 @@ defmodule UrlShortenerWeb.ControllersTest do
     :timer.sleep(3000)
 
     get_response_1 = get(conn, "/#{short_url}")
+
+    Process.send(UrlShortener.UrlManager, :clean_expired, [:noconnect])
 
     :timer.sleep(3000)
 
@@ -118,13 +127,12 @@ defmodule UrlShortenerWeb.ControllersTest do
 
     %{"shortUrl" => short_url} = response_3.resp_body |> Poison.decode!()
 
-    assert %UrlShortener.Schema.Urls{
-             full_url: db_original,
-             short_url: db_short
-           } = Repo.get_by(Urls, full_url: original)
+    :timer.sleep(2000)
 
-    assert db_original == original
-    assert db_short == short_url
+    assert [{tab_short, tab_original}] = :ets.lookup(:shortened_urls, short_url)
+
+    assert tab_original == original
+    assert tab_short == short_url
   end
 
   test "tries get on unexisting url", %{conn: conn} do
@@ -145,17 +153,21 @@ defmodule UrlShortenerWeb.ControllersTest do
 
     %{"shortUrl" => short_url} = response.resp_body |> Poison.decode!()
 
+    :timer.sleep(2000)
+
     conn = get(conn, "/#{short_url}")
 
     assert redirected_to(conn) == original
   end
 
   test "redirect maintaining dynamic parameters", %{conn: conn} do
-    original = "http://example.com/about/index.html"
+    original = "http://example.com/about/parameters_test"
 
     response = post(conn, "api/generate_short_url", fullUrl: "#{original}?uid=123")
 
     %{"shortUrl" => short_url} = response.resp_body |> Poison.decode!()
+
+    :timer.sleep(2000)
 
     conn = get(conn, "/#{short_url}?uid=789")
 
@@ -163,11 +175,13 @@ defmodule UrlShortenerWeb.ControllersTest do
   end
 
   test "verify request headers saved", %{conn: conn} do
-    original = "http://example.com/about/index.html"
+    original = "http://example.com/about/headers_test"
 
     response = post(conn, "api/generate_short_url", fullUrl: original)
 
     %{"shortUrl" => short_url} = response.resp_body |> Poison.decode!()
+
+    :timer.sleep(2000)
 
     conn =
       conn
@@ -177,9 +191,7 @@ defmodule UrlShortenerWeb.ControllersTest do
     assert redirected_to(conn) == original
     assert conn.status == 302
 
-    %Urls{id: url_id} = Repo.get_by(Urls, full_url: original)
-
-    %UrlMetadata{metadata: req_metadata} = Repo.get_by(UrlMetadata, urls_id: url_id)
+    %UrlMetadata{metadata: req_metadata} = Repo.get_by(UrlMetadata, short_url: short_url)
 
     assert Map.get(req_metadata, "test") == "my_key"
   end

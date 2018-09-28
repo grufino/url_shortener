@@ -1,7 +1,9 @@
 defmodule UrlShortener.Utils do
 
-  def advance_one_month(time_now \\ Timex.now()) do
-    time_now
+  @timex Application.get_env(:url_shortener, :timex, Timex)
+
+  def advance_one_month() do
+    @timex.now()
     |> Timex.shift(days: 30)
   end
 end
